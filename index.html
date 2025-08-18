@@ -3,42 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <title>OCR Proxy</title>
-  <!-- Load Ocrad.js from CDN -->
+  <!-- 1. Load OCRAD.js -->
   <script src="https://cdn.jsdelivr.net/npm/ocrad.js@1.0.0/ocrad.min.js"></script>
+  <!-- 2. Inline OCR logic runs only after OCRAD has loaded -->
+  <script>
+    (function() {
+      if (typeof OCRAD === 'undefined') {
+        console.error('OCRAD failed to load');
+        return;
+      }
+      // Signal to opener that we’re ready
+      window.opener.postMessage({ type: 'READY' }, '*');
+
+      // Listen for PROCESS requests
+      window.addEventListener('message', async event => {
+        const { type, imgData, id } = event.data;
+        if (type !== 'PROCESS') return;
+        try {
+          // Draw image into canvas
+          const img = new Image();
+          await new Promise((res, rej) => {
+            img.onload = res;
+            img.onerror = () => rej(new Error('Image load error'));
+            img.src = imgData;
+          });
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          // Run OCRAD
+          const text = OCRAD(canvas).trim();
+          // Send back result
+          window.opener.postMessage({ type: 'RESULT', text, id }, '*');
+        } catch (err) {
+          window.opener.postMessage({ type: 'ERROR', message: err.message, id }, '*');
+        }
+      });
+    })();
+  </script>
 </head>
 <body>
-  <script>
-    // Listen for messages from the opener
-    window.addEventListener('message', async event => {
-      const { type, imgData, id } = event.data;
-      if (type !== 'PROCESS') return;
-
-      try {
-        // Draw image
-        const img = new Image();
-        img.src = imgData;
-        await new Promise((res, rej) => {
-          img.onload = res;
-          img.onerror = () => rej(new Error('Image load error'));
-        });
-
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-
-        // Run OCR
-        const text = OCRAD(canvas).trim();
-
-        // Post result back
-        window.opener.postMessage({ type: 'RESULT', text, id }, '*');
-      } catch (err) {
-        window.opener.postMessage({ type: 'ERROR', message: err.message, id }, '*');
-      }
-    });
-
-    // Signal ready
-    window.opener.postMessage({ type: 'READY' }, '*');
-  </script>
 </body>
 </html>
