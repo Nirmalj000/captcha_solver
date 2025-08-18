@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OCR Proxy</title>
+  <!-- Load Ocrad.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/ocrad.js@1.0.0/ocrad.min.js"></script>
+</head>
+<body>
+  <script>
+    // Listen for messages from the opener
+    window.addEventListener('message', async event => {
+      const { type, imgData, id } = event.data;
+      if (type !== 'PROCESS') return;
+
+      try {
+        // Draw image
+        const img = new Image();
+        img.src = imgData;
+        await new Promise((res, rej) => {
+          img.onload = res;
+          img.onerror = () => rej(new Error('Image load error'));
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+
+        // Run OCR
+        const text = OCRAD(canvas).trim();
+
+        // Post result back
+        window.opener.postMessage({ type: 'RESULT', text, id }, '*');
+      } catch (err) {
+        window.opener.postMessage({ type: 'ERROR', message: err.message, id }, '*');
+      }
+    });
+
+    // Signal ready
+    window.opener.postMessage({ type: 'READY' }, '*');
+  </script>
+</body>
+</html>
